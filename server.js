@@ -21,7 +21,7 @@ app.post('/api/chat', async (req, res) => {
       model: "llama3-8b-8192",
       messages: [
         { role: "system", content: "You are Friend AI, created by Md. Monayem Mia. You are a best friend, helpful, friendly, funny. Answer in Bangla mixed English like a real friend." },
-    ...messages
+       ...messages
       ],
     });
     res.json({ reply: completion.choices[0].message.content });
@@ -31,5 +31,8 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.get('/', (req,res)=> res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.listen(3000, ()=> console.log("Friend AI running at http://localhost:3000"));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+// Render এর জন্য এটাই লাগবে
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Friend AI running on port " + PORT));
