@@ -1,70 +1,46 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import express from 'express';
+import cors from 'cors';
+import { GoogleGenAI } from '@google/genai';
 
-dotenv.config();
 const app = express();
-
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static("public"));
+app.use(express.json());
+app.use(express.static('public'));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const apiKey = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
-async function getAIResponse(prompt, imageBase64) {
-  const models = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash-latest"];
+const MODELS_TO_TRY = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash'
+];
 
-  for (let modelName of models) {
+app.post('/api/chat', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'message required' });
+  
+  for (const modelName of MODELS_TO_TRY) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      let result;
-
-      if (imageBase64) {
-        const base64Data = imageBase64.includes(',')? imageBase64.split(',')[1] : imageBase64;
-        result = await model.generateContent([
-          prompt,
-          { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
-        ]);
-      } else {
-        result = await model.generateContent(prompt);
+      console.log(`Trying: ${modelName}`);
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: [{ role: 'user', parts: [{ text: message }] }],
+        config: {
+          systemInstruction: "You are Friend AI, made by Monayem. Friendly Bengali friend."
+        }
+      });
+      const text = response.text;
+      if (text) {
+        return res.json({ reply: text });
       }
-
-      return result.response.text();
-    } catch (err) {
-      console.log(modelName + " busy, trying next...");
+    } catch (e) {
+      console.log(`${modelName} failed: ${e.message}`);
       continue;
     }
   }
-  return null;
-}
-
-app.post("/api/chat", async (req, res) => {
-  try {
-    const { message, image } = req.body;
-
-    if (!message &&!image) {
-      return res.json({ reply: "মেসেজ দাও ভাই!" });
-    }
-
-    const systemPrompt = "তুমি Friend AI, তোমাকে Monayem বানিয়েছে। তুমি বন্ধুসুলভ ভাবে বাংলায় উত্তর দাও। ইউজারের প্রশ্ন: " + (message || "ছবিটা কি?");
-
-    const reply = await getAIResponse(systemPrompt, image);
-
-    if (!reply) {
-      return res.json({ reply: "একটু বেশি চাপ পড়েছে! 😅 10 সেকেন্ড পর আবার Message দাও, আমি রেডি!" });
-    }
-
-    res.json({ reply });
-  } catch (error) {
-    console.error(error);
-    res.json({ reply: "একটু বেশি চাপ পড়েছে! 😅 10 সেকেন্ড পর আবার Message দাও, আমি রেডি!" });
-  }
+  res.json({ reply: 'একটু বেশি চাপ পড়েছে! 😅 আবার Try করো!' });
 });
 
-app.get("/", (req, res) => {
-  res.sendFile("index.html", { root: "public" });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server Live on " + PORT));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log('Running on ' + PORT));
