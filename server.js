@@ -22,8 +22,8 @@ app.post('/api/chat', async (req, res) => {
       return res.status(500).json({ error: 'GEMINI_API_KEY missing' });
     }
 
-    // Gemini API Call
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    // Gemini API Call - Updated Model
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -49,7 +49,8 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.get('*', (req, res) => {
+// FIX: '*' এর জন্য Error হচ্ছিল, এটা ঠিক করা হলো
+app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
