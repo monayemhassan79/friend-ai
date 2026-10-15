@@ -1,60 +1,90 @@
-import express from 'express';
-import cors from 'cors';
-import { GoogleGenAI } from '@google/genai';
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 10000;
+
 app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
-
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  console.error('GEMINI_API_KEY missing');
-}
-const ai = new GoogleGenAI({ apiKey: apiKey });
-
-const MODELS_TO_TRY = [
-  'gemini-2.5-flash-lite',
-  'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-pro-latest',
-  'gemini-2.5-pro'
-];
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/api/chat', async (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
-  
-  let lastError = null;
-  for (const modelName of MODELS_TO_TRY) {
-    try {
-      console.log(`Trying model: ${modelName}`);
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: [{ role: 'user', parts: [{ text: message }] }],
-        config: {
-          systemInstruction: "You are Friend AI, made by Monayem. You are a friendly, helpful Bengali friend. Reply in same language user uses, mostly Bengali."
-        }
-      });
-      const text = response.text;
-      if (text) {
-        console.log(`Success with ${modelName}`);
-        return res.json({ reply: text });
-      }
-    } catch (e) {
-      console.log(`${modelName} failed: ${e.message}`);
-      lastError = e;
-      await sleep(1000);
-      continue;
+  try {
+    let userText = req.body.messages?.[req.body.messages.length - 1]?.content || req.body.message || '';
+    let history = req.body.messages || [];
+    let imageBase64 = req.body.image || null;
+
+    if (!userText &&!imageBase64) return res.json({ reply: 'বলো, কি help লাগবে? ছবি থাকলে + চাপো!' });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    const MODELS_TO_TRY = [
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-3-flash-preview',
+      'gemini-flash-latest',
+      'gemini-2.0-flash'
+    ];
+
+    const contents = history.map(m => ({
+      role: m.role === 'assistant'? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+
+    let parts = [];
+    if (userText) parts.push({ text: userText });
+    if (imageBase64) {
+      const base64Data = imageBase64.split(',')[1] || imageBase64;
+      const mimeType = imageBase64.match(/data:[STRIPPED]1] || 'image/jpeg';
+      parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
     }
+
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: parts });
+    } else {
+      contents[contents.length - 1].parts = parts;
+    }
+
+    let lastError = null;
+    for (const model of MODELS_TO_TRY) {
+      try {
+        console.log(`Trying model: ${model}`);
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: contents,
+            systemInstruction: { parts: [{ text: "You are Friend AI, made by Monayem. Be friendly, helpful. Reply in user's language, mostly Bengali." }] }
+          })
+        });
+
+        const data = await response.json();
+        if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+          console.log(`Success with ${model}`);
+          return res.json({ reply: data.candidates[0].content.parts[0].text });
+        } else {
+          console.log(`${model} failed: ${JSON.stringify(data).substring(0,200)}`);
+          lastError = data.error?.message || 'No candidates';
+          continue;
+        }
+      } catch (e) {
+        console.log(`${model} error: ${e.message}`);
+        lastError = e.message;
+        continue;
+      }
+    }
+
+    console.log('All models failed:', lastError);
+    return res.json({ reply: `একটু Busy আছি ভাই, 10 সেকেন্ড পর আবার বলো!` });
+  } catch (e) {
+    console.error(e);
+    res.json({ reply: 'Server busy!' });
   }
-  
-  console.error('All models failed', lastError?.message);
-  res.json({ reply: 'একটু বেশি চাপ পড়েছে! 😅 10 সেকেন্ড পর আবার Message দাও, আমি রেডি!\n\n(Debug: ' + (lastError?.message?.substring(0,100) || 'unknown') + ')' });
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log('Running on ' + PORT));
+app.get('/*splat', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => console.log(`Running on ${PORT}`));
