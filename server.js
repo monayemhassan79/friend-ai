@@ -13,58 +13,47 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.post('/api/chat', async (req, res) => {
   try {
     let userText = req.body.messages?.[req.body.messages.length - 1]?.content || req.body.message || '';
-    let historyForGemini = [];
-
-    if (req.body.messages && Array.isArray(req.body.messages)) {
-      historyForGemini = req.body.messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
-    } else {
-      historyForGemini = [{ parts: [{ text: userText }] }];
-    }
+    let history = req.body.messages || [];
 
     if (!userText) return res.json({ reply: 'বলো, কি help লাগবে?' });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    
-    // সব Latest Model Try করবে, একটা না চললে আরেকটা
-    const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-flash-latest',
-      'gemini-1.5-flash-latest'
-    ];
+    if (!apiKey) return res.json({ reply: 'API Key Missing!' });
 
-    let lastError = null;
-    
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`Trying model: ${modelName}`);
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: historyForGemini,
-            systemInstruction: { parts: [{ text: "You are Friend AI, made by Monayem. Friendly, helpful, reply in user's language (Bengali/English mix)." }] }
-          })
-        });
+    const contents = history.map(m => ({
+      role: m.role === 'assistant'? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
 
-        const data = await response.json();
-        if (data.candidates && data.candidates[0]) {
-          return res.json({ reply: data.candidates[0].content.parts[0].text });
-        }
-        lastError = data.error?.message;
-        console.log(`${modelName} failed:`, lastError);
-      } catch (e) {
-        lastError = e.message;
-      }
+    if (contents.length === 0) {
+      contents.push({ parts: [{ text: userText }] });
     }
-    
-    return res.json({ reply: `AI Error: ${lastError}` });
+
+    // 2026 Working Model - v1beta must
+    const model = 'gemini-2.0-flash';
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: contents,
+        systemInstruction: { parts: [{ text: "You are Friend AI, made by Monayem. Be friendly, helpful. Reply in user's language." }] }
+      })
+    });
+
+    const data = await response.json();
+    console.log("Gemini Response:", JSON.stringify(data).substring(0, 500));
+
+    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+      return res.json({ reply: data.candidates[0].content.parts[0].text });
+    } else {
+      console.log("Full Error:", data);
+      return res.json({ reply: `AI Error: ${data.error?.message || 'Model busy, try again'}` });
+    }
 
   } catch (error) {
-    res.json({ reply: 'AI is busy, একটু পর try করো!' });
+    console.error(error);
+    res.json({ reply: 'Server busy, একটু পর try করো!' });
   }
 });
 
@@ -72,4 +61,4 @@ app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`Friend AI running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Running on ${PORT}`));
