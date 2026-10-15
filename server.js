@@ -1,67 +1,56 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-require('dotenv').config();
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
+dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 10000;
-
 app.use(cors());
-app.use(express.json({ limit: '15mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static("public"));
 
-app.post('/api/chat', async (req, res) => {
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Auto Retry Function
+async function getAIResponse(prompt, imageBase64) {
+  const models = ["gemini-1.5-flash-latest", "gemini-1.5-flash-8b", "gemini-1.5-flash"];
+  for (let modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      let result;
+      if (imageBase64) {
+        const base64Data = imageBase64.split(',')[1];
+        result = await model.generateContent([
+          prompt,
+          { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
+        ]);
+      } else {
+        result = await model.generateContent(prompt);
+      }
+      return result.response.text();
+    } catch (err) {
+      console.log(`${modelName} failed: ${err.message}, trying next...`);
+      continue; // পরের মডেল ট্রাই করো
+    }
+  }
+  throw new Error("All models busy");
+}
+
+app.post("/api/chat", async (req, res) => {
   try {
-    let userText = req.body.messages?.[req.body.messages.length - 1]?.content || req.body.message || '';
-    let history = req.body.messages || [];
-    let imageBase64 = req.body.image || null;
+    const { message, image } = req.body;
+    if (!message &&!image) return res.json({ reply: "মেসেজ দাও ভাই!" });
 
-    if (!userText &&!imageBase64) return res.json({ reply: 'বলো, কি help লাগবে? ছবি থাকলে + চাপো!' });
+    const systemPrompt = `তুমি Friend AI, Made by Monayem। তোমাকে Monayem তৈরি করেছে। তুমি বন্ধুসুলভ, বাংলায় উত্তর দাও। User prompt: ${message}`;
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const model = 'gemini-3.8-flash';
-
-    const contents = history.map(m => ({
-      role: m.role === 'assistant'? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
-
-    let parts = [];
-    if (userText) parts.push({ text: userText });
-    if (imageBase64) {
-      const base64Data = imageBase64.split(',')[1] || imageBase64;
-      const mimeType = imageBase64.match(/data:(.*?);/)?.[1] || 'image/jpeg';
-      parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
-    }
-
-    if (contents.length === 0) {
-      contents.push({ role: 'user', parts: parts });
-    } else {
-      contents[contents.length - 1].parts = parts;
-    }
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: contents,
-        systemInstruction: { parts: [{ text: "You are Friend AI, made by Monayem. Be friendly, helpful. If user sends image, explain the image in user's language. Reply in user's language." }] }
-      })
-    });
-
-    const data = await response.json();
-    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-      return res.json({ reply: data.candidates[0].content.parts[0].text });
-    } else {
-      return res.json({ reply: `AI Error: ${data.error?.message || 'Model busy'}` });
-    }
-  } catch (e) {
-    res.json({ reply: 'Server busy!' });
+    const reply = await getAIResponse(systemPrompt, image);
+    res.json({ reply });
+  } catch (error) {
+    console.error(error);
+    // ইউজারকে সুন্দর বাংলায় Error দেখাবে, ইংরেজি High Demand না
+    res.json({ reply: "একটু বেশি চাপ পড়েছে! 😅 10 সেকেন্ড পর আবার Message দাও, আমি রেডি!" });
   }
 });
 
-app.get('/*splat', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.listen(PORT, () => console.log(`Running on ${PORT}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
