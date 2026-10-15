@@ -1,50 +1,58 @@
-require('dotenv').config();
 const express = require('express');
-const OpenAI = require('openai');
 const cors = require('cors');
 const path = require('path');
+require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ===== GROQ / OPENAI SETUP =====
-const openai = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: 'https://api.groq.com/openai/v1',
-});
-
-// ===== CHAT API =====
 app.post('/api/chat', async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
 
-    const completion = await openai.chat.completions.create({
-      model: 'llama3-8b-8192',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are Friend AI, created by Md. Monayem Mia. You are a best friend, helpful, friendly, and talk like a real friend.',
-        },
-       ...messages,
-      ],
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY missing' });
+    }
+
+    // Gemini API Call
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: `You are a friendly AI assistant named Friend AI, created by Monayem. Reply in the same language user uses (Bengali/English mix allowed). Be helpful and friendly. User says: ${message}` }]
+        }]
+      })
     });
 
-    res.json({
-      reply: completion.choices[0].message.content,
-    });
-  } catch (e) {
-    console.log(e);
-    res.status(500).json({ reply: 'Sorry, something went wrong!' });
+    const data = await response.json();
+
+    if (!data.candidates ||!data.candidates[0]) {
+        console.log("Gemini Error:", data);
+        return res.status(500).json({ error: 'AI Error', details: data });
+    }
+
+    const reply = data.candidates[0].content.parts[0].text;
+    res.json({ reply });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'AI is busy, try again!' });
   }
 });
 
-// ===== START SERVER =====
-const PORT = process.env.PORT || 3000;
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`Friend AI running on port ${PORT}`);
 });
