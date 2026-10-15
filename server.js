@@ -8,38 +8,48 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  console.error('GEMINI_API_KEY missing');
+}
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const MODELS_TO_TRY = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-flash'
+  'gemini-flash-latest'
 ];
 
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
   
+  let lastError = null;
   for (const modelName of MODELS_TO_TRY) {
     try {
-      console.log(`Trying: ${modelName}`);
+      console.log(`Trying model: ${modelName}`);
       const response = await ai.models.generateContent({
         model: modelName,
         contents: [{ role: 'user', parts: [{ text: message }] }],
         config: {
-          systemInstruction: "You are Friend AI, made by Monayem. Friendly Bengali friend."
+          systemInstruction: "You are Friend AI, made by Monayem. You are a friendly, helpful Bengali friend. Reply in same language user uses, mostly Bengali."
         }
       });
       const text = response.text;
       if (text) {
+        console.log(`Success with ${modelName}`);
         return res.json({ reply: text });
       }
     } catch (e) {
       console.log(`${modelName} failed: ${e.message}`);
+      lastError = e;
       continue;
     }
   }
-  res.json({ reply: 'একটু বেশি চাপ পড়েছে! 😅 আবার Try করো!' });
+  
+  console.error('All models failed', lastError?.message);
+  res.json({ reply: 'একটু বেশি চাপ পড়েছে! 😅 10 সেকেন্ড পর আবার Message দাও, আমি রেডি!\n\n(Debug: ' + (lastError?.message?.substring(0,100) || 'unknown') + ')' });
 });
 
 const PORT = process.env.PORT || 10000;
