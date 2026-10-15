@@ -14,12 +14,15 @@ if (!apiKey) {
 const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const MODELS_TO_TRY = [
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
   'gemini-2.0-flash-lite',
-  'gemini-flash-latest'
+  'gemini-pro-latest',
+  'gemini-2.5-pro'
 ];
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
@@ -44,6 +47,7 @@ app.post('/api/chat', async (req, res) => {
     } catch (e) {
       console.log(`${modelName} failed: ${e.message}`);
       lastError = e;
+      await sleep(1000);
       continue;
     }
   }
