@@ -12,22 +12,19 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.post('/api/chat', async (req, res) => {
   try {
-    // FIX 1: messages array এবং message দুটোই সাপোর্ট করবে
     let userText = '';
     let historyForGemini = [];
 
     if (req.body.messages && Array.isArray(req.body.messages)) {
-      // Frontend থেকে history আসলে
       userText = req.body.messages[req.body.messages.length - 1]?.content || '';
       historyForGemini = req.body.messages.map(m => ({
         role: m.role === 'assistant'? 'model' : 'user',
         parts: [{ text: m.content }]
       }));
     } else {
-      // পুরানো message সাপোর্ট
       userText = req.body.message || '';
       historyForGemini = [{
-        parts: [{ text: `You are a friendly AI assistant named Friend AI, created by Monayem. Reply in the same language user uses (Bengali/English mix allowed). Be helpful and friendly. User says: ${userText}` }]
+        parts: [{ text: userText }]
       }];
     }
 
@@ -37,24 +34,26 @@ app.post('/api/chat', async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.log("ERROR: GEMINI_API_KEY missing!");
       return res.json({ reply: 'Server এ API Key পাওয়া যায়নি' });
     }
 
-    // FIX 2: Stable model gemini-1.5-flash ব্যবহার করা হলো
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    // FIXED MODEL - এটাই আসল Fix
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: historyForGemini
+        contents: historyForGemini,
+        systemInstruction: {
+          parts: [{ text: "You are Friend AI, created by Monayem. You are friendly, helpful. Reply in the same language user uses (Bengali/English mix allowed)." }]
+        }
       })
     });
 
     const data = await response.json();
 
     if (!data.candidates ||!data.candidates[0]) {
-        console.log("Gemini Error Full:", JSON.stringify(data));
-        return res.json({ reply: `AI Error: ${data.error?.message || 'Try again'}` });
+      console.log("Gemini Error:", JSON.stringify(data));
+      return res.json({ reply: `AI Error: ${data.error?.message || 'Try again later'}` });
     }
 
     const reply = data.candidates[0].content.parts[0].text;
