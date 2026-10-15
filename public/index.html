@@ -6,7 +6,9 @@
   <title>Friend AI - Your Best Friend</title>
 
   <style>
-    /* ===== VARIABLES ===== */
+    /* ===============================
+       1. VARIABLES
+    =============================== */
     :root {
       --bg-main: #0d1117;
       --bg-card: #161b22;
@@ -18,7 +20,9 @@
       --radius-input: 24px;
     }
 
-    /* ===== RESET & BASE ===== */
+    /* ===============================
+       2. RESET & BASE
+    =============================== */
     * {
       margin: 0;
       padding: 0;
@@ -34,7 +38,9 @@
       height: 100vh;
     }
 
-    /* ===== HEADER ===== */
+    /* ===============================
+       3. HEADER
+    =============================== */
     header {
       padding: 16px;
       text-align: center;
@@ -44,7 +50,9 @@
       border-bottom: 1px solid var(--border);
     }
 
-    /* ===== CHAT AREA ===== */
+    /* ===============================
+       4. CHAT AREA
+    =============================== */
     #chat {
       flex: 1;
       overflow-y: auto;
@@ -54,7 +62,9 @@
       gap: 12px;
     }
 
-    /* ===== MESSAGES ===== */
+    /* ===============================
+       5. MESSAGES
+    =============================== */
     .msg {
       padding: 12px 16px;
       border-radius: var(--radius-msg);
@@ -73,7 +83,9 @@
       background: var(--bg-msg-ai);
     }
 
-    /* ===== INPUT BOX ===== */
+    /* ===============================
+       6. INPUT BOX
+    =============================== */
     #box {
       display: flex;
       padding: 12px;
@@ -155,7 +167,6 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    // Enter key support
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') send();
     });
